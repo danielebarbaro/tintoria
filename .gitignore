@@ -21,3 +21,6 @@ pids
 # OS
 .DS_Store
 Thumbs.db 
+
+# Cache
+ticketCache.json

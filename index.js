@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
+import { loadTicketCache, saveTicketCache, getNewTickets } from './ticketCache.js';
 
 // Load environment variables
 dotenv.config();
@@ -90,8 +91,6 @@ async function monitorTickets() {
       
       // Search for all links on the page
       const links = Array.from(document.querySelectorAll('a'));
-
-      console.log(links);
       
       for (const link of links) {
         // Check text and URL
@@ -102,7 +101,8 @@ async function monitorTickets() {
           results.push({
             text: text,
             url: link.href,
-            element: link.outerHTML
+            element: link.outerHTML,
+            timestamp: new Date().toISOString()
           });
         }
       }
@@ -112,10 +112,21 @@ async function monitorTickets() {
     
     console.log(`Found ${tickets.length} "BIGLIETTI" buttons with bit.ly URLs`);
     
-    // If tickets are available, send a notification
-    if (tickets.length > 0) {
-      console.log('Sending notification...');
-      await sendNotification(tickets);
+    // Load cached tickets
+    const cachedTickets = await loadTicketCache();
+    
+    // Get only new tickets
+    const newTickets = getNewTickets(tickets, cachedTickets);
+    
+    // If new tickets are available, send a notification
+    if (newTickets.length > 0) {
+      console.log(`Found ${newTickets.length} new tickets! Sending notification...`);
+      await sendNotification(newTickets);
+      
+      // Save all tickets to cache
+      await saveTicketCache(tickets);
+    } else {
+      console.log('No new tickets found.');
     }
     
   } catch (error) {
