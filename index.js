@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 import { loadTicketCache, saveTicketCache, getNewTickets } from './ticketCache.js';
+import os from 'os';
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +19,9 @@ const resend = new Resend(resendConfig.apiKey);
 
 // URL to monitor
 const URL = process.env.URL_MONITORATO;
+
+// Check if we're running in production (Render)
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Array of common user agents for rotation
 const userAgents = [
@@ -52,7 +56,16 @@ async function monitorTickets() {
   
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-extensions'
+    ]
   });
   
   try {

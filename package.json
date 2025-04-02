@@ -10,6 +10,7 @@
     "react-dom": "^18.2.0"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "NODE_ENV=production node index.js",
+    "dev": "NODE_ENV=development node index.js"
   }
 }
