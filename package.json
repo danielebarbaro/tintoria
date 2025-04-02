@@ -1,0 +1,13 @@
+{
+  "name": "tintoria-monitor",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "puppeteer": "^22.0.0",
+    "resend": "^3.0.0",
+    "dotenv": "^16.4.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
