@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: tintoria-monitor
+    env: node
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: npm run start
+    autoDeploy: true
+    plan: free
+

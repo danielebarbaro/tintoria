@@ -7,11 +7,11 @@
     "email": "barbaro.daniele@gmail.com"
   },
   "dependencies": {
-    "puppeteer": "^22.0.0",
-    "resend": "^3.0.0",
     "dotenv": "^16.4.0",
+    "puppeteer": "^21.3.8",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "resend": "^3.0.0"
   },
   "scripts": {
     "postinstall": "puppeteer browsers install chrome",
