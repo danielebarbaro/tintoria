@@ -18,7 +18,7 @@ const resendConfig = {
 const resend = new Resend(resendConfig.apiKey);
 
 // URL to monitor
-const URL = process.env.URL_MONITORATO;
+const URL = process.env.SITE_URL;
 
 // Check if we're running in production (Render)
 const isProduction = process.env.NODE_ENV === 'production';
