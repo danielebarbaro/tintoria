@@ -9,11 +9,14 @@ A Node.js application that monitors the Tintoria Podcast website for ticket avai
 - 🔄 Randomizes user agents and intervals to avoid detection
 - 💾 Caches found tickets to avoid duplicate notifications
 - 🌐 Works both locally and on serverless platforms (Render)
+- 📱 Sends status updates and error notifications via Slack
+- 🌙 Configurable night mode to skip checks during specific hours
 
 ## Prerequisites
 
 - Node.js v22 or higher
 - A Resend API key for email notifications
+- A Slack Webhook URL for notifications
 - Google Chrome installed (for local development)
 
 ## Installation
@@ -31,11 +34,35 @@ npm install
 
 3. Create a `.env` file in the root directory with the following variables:
 ```env
+# Resend configuration
 RESEND_API_KEY=your_resend_api_key
 EMAIL_FROM=notifications@yourdomain.com
 EMAIL_TO=your@email.com
+
+# Site to monitor
 SITE_URL=https://show.thecomedyclub.it/pages/tintoriapodcast
+
+# Slack configuration
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# Monitoring schedule
+NIGHT_START_HOUR=23    # Hour when night mode starts (default: 23)
+NIGHT_END_HOUR=6      # Hour when night mode ends (default: 6)
+MIN_CHECK_INTERVAL=20  # Minimum minutes between checks (default: 20)
+MAX_CHECK_INTERVAL=90  # Maximum minutes between checks (default: 90)
 ```
+
+## Slack Setup
+
+1. Go to your Slack workspace
+2. Click on the channel where you want to receive notifications
+3. Click the gear icon (⚙️) next to the channel name
+4. Select "Integrations" from the menu
+5. Click "Add apps"
+6. Search for "Incoming Webhooks"
+7. Click "Add Incoming Webhooks integration"
+8. Copy the Webhook URL
+9. Paste the URL in your `.env` file as `SLACK_WEBHOOK_URL`
 
 ## Usage
 
@@ -44,7 +71,7 @@ SITE_URL=https://show.thecomedyclub.it/pages/tintoriapodcast
 npm run dev
 ```
 
-### Production (Render)
+### Production 
 ```bash
 npm start
 ```
@@ -57,15 +84,26 @@ npm start
 - `EMAIL_FROM`: The email address that will send notifications
 - `EMAIL_TO`: The email address that will receive notifications
 - `SITE_URL`: The URL to monitor for ticket availability
+- `SLACK_WEBHOOK_URL`: Your Slack Incoming Webhook URL
+- `NIGHT_START_HOUR`: Hour when night mode starts (default: 23)
+- `NIGHT_END_HOUR`: Hour when night mode ends (default: 6)
+- `MIN_CHECK_INTERVAL`: Minimum minutes between checks (default: 20)
+- `MAX_CHECK_INTERVAL`: Maximum minutes between checks (default: 90)
 
 ### Monitoring Settings
 
 The application includes several configurable settings:
 
 - Random user agent rotation
-- Random check intervals (20-45 minutes)
+- Random check intervals (configurable via environment variables)
 - Ticket caching to avoid duplicate notifications
 - Human-like behavior simulation (scrolling, pauses)
+- Configurable night mode to skip checks during specific hours
+- Slack notifications for:
+  - New tickets found
+  - Status updates
+  - Error alerts
+  - Night mode status
 
 ## How It Works
 
@@ -75,9 +113,19 @@ The application includes several configurable settings:
 4. It searches for "BIGLIETTI" buttons with bit.ly URLs
 5. If new tickets are found:
    - Sends an email notification
+   - Sends a Slack notification
    - Caches the found tickets
-6. Waits for a random interval (20-45 minutes)
-7. Repeats the process
+6. If no tickets are found:
+   - Sends a status update to Slack
+7. If an error occurs:
+   - Sends an error alert to Slack
+8. If it's night time (between NIGHT_START_HOUR and NIGHT_END_HOUR):
+   - Skips the check
+   - Sends a night mode status to Slack
+   - Schedules next check for NIGHT_END_HOUR
+9. Otherwise:
+   - Waits for a random interval (between MIN_CHECK_INTERVAL and MAX_CHECK_INTERVAL)
+10. Repeats the process
 
 ## Cache System
 
@@ -93,20 +141,9 @@ The application includes comprehensive error handling for:
 - Browser launch failures
 - Email sending errors
 - Cache read/write operations
+- Slack notification errors
 
 ## Deployment
-
-### Render
-
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Set the following environment variables:
-   - `RESEND_API_KEY`
-   - `EMAIL_FROM`
-   - `EMAIL_TO`
-   - `SITE_URL`
-4. Set the build command: `npm install`
-5. Set the start command: `npm start`
 
 ## Contributing
 
@@ -124,4 +161,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Puppeteer](https://pptr.dev/) for web scraping
 - [Resend](https://resend.com) for email notifications
-- [Render](https://render.com) for hosting 
+- [Slack Incoming Webhooks](https://api.slack.com/messaging/webhooks) for notifications

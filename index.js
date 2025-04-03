@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { loadTicketCache, saveTicketCache, getNewTickets } from './ticketCache.js';
 import os from 'os';
 
-// Load environment variables
 dotenv.config();
 
 // Resend configuration (https://resend.com)
@@ -35,40 +34,100 @@ const userAgents = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/124.0.0.0 Safari/537.36'
 ];
 
-// Function to get a random user agent
 function getRandomUserAgent() {
   const index = Math.floor(Math.random() * userAgents.length);
   return userAgents[index];
 }
 
-// Function to generate a random interval between 20 and 45 minutes (in milliseconds)
+// Function to generate a random interval between MIN_CHECK_INTERVAL and MAX_CHECK_INTERVAL minutes (in milliseconds)
 function getRandomInterval() {
-  const minMinutes = 20;
-  const maxMinutes = 45;
+  const minMinutes = parseInt(process.env.MIN_CHECK_INTERVAL) || 20;
+  const maxMinutes = parseInt(process.env.MAX_CHECK_INTERVAL) || 90;
   const minutes = Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) + minMinutes;
   return minutes * 60 * 1000;
 }
 
-// Main monitoring function
+async function sendSlackNotification(message, isError = false) {
+  try {
+    const response = await fetch(process.env.SLACK_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: message,
+        color: isError ? "#FF0000" : "#00FF00"
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('Error sending Slack notification:', error);
+  }
+}
+
+// Function to check if current time is between NIGHT_START_HOUR and NIGHT_END_HOUR
+function isNightTime() {
+  const now = new Date();
+  const hour = now.getHours();
+  const nightStart = parseInt(process.env.NIGHT_START_HOUR) || 23;
+  const nightEnd = parseInt(process.env.NIGHT_END_HOUR) || 6;
+  return hour >= nightStart || hour < nightEnd;
+}
+
+function getNextCheckTime() {
+  const now = new Date();
+  const hour = now.getHours();
+  const nightStart = parseInt(process.env.NIGHT_START_HOUR) || 23;
+  const nightEnd = parseInt(process.env.NIGHT_END_HOUR) || 6;
+  
+  if (hour >= nightStart || hour < nightEnd) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(nightEnd, 0, 0, 0);
+    return tomorrow;
+  }
+  
+  const nextInterval = getRandomInterval();
+  return new Date(now.getTime() + nextInterval);
+}
+
 async function monitorTickets() {
+  if (isNightTime()) {
+    const nextCheck = getNextCheckTime();
+    console.log(`Skipping check during night hours. Next check scheduled for: ${nextCheck.toLocaleString()}`);
+    await sendSlackNotification(`🌙 *Night Mode*\nSkipping check during night hours. Next check scheduled for: ${nextCheck.toLocaleString()}`);
+    
+    const delay = nextCheck.getTime() - Date.now();
+    setTimeout(monitorTickets, delay);
+    return;
+  }
+
   const userAgent = getRandomUserAgent();
   console.log(`[${new Date().toLocaleString()}] Starting ticket check with user-agent: ${userAgent}`);
   
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-extensions'
-    ]
-  });
-  
+  let browser;
   try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process'
+      ],
+      timeout: 60000,
+      ignoreHTTPSErrors: true
+    });
+    
     const page = await browser.newPage();
     
     // Set user agent
@@ -86,8 +145,21 @@ async function monitorTickets() {
     // Set a reasonable timeout
     await page.setDefaultNavigationTimeout(60000);
     
-    // Visit the page
-    await page.goto(URL, { waitUntil: 'networkidle2' });
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        await page.goto(URL, { 
+          waitUntil: 'networkidle0',
+          timeout: 60000
+        });
+        break;
+      } catch (error) {
+        retries--;
+        if (retries === 0) throw error;
+        console.log(`Retrying page load... (${retries} attempts left)`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
     
     // Emulate human behavior with random scrolling
     await page.evaluate(() => {
@@ -131,32 +203,40 @@ async function monitorTickets() {
     // Get only new tickets
     const newTickets = getNewTickets(tickets, cachedTickets);
     
-    // If new tickets are available, send a notification
     if (newTickets.length > 0) {
       console.log(`Found ${newTickets.length} new tickets! Sending notification...`);
       await sendNotification(newTickets);
       
-      // Save all tickets to cache
       await saveTicketCache(tickets);
+      
+      await sendSlackNotification(`🎉 *Tickets Found!*\nFound ${newTickets.length} new tickets for Tintoria Podcast!\nCheck the email for details.`);
     } else {
       console.log('No new tickets found.');
+      await sendSlackNotification(`✅ *Status Update*\nNo new tickets found. Next check in ${Math.round(getRandomInterval()/60000)} minutes.`);
     }
     
   } catch (error) {
     console.error('Error during monitoring:', error);
+
+    await sendSlackNotification(`❌ *Error Alert*\nAn error occurred during monitoring:\n\`\`\`${error.message}\`\`\`\nStack trace:\n\`\`\`${error.stack}\`\`\``, true);
   } finally {
-    await browser.close();
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (error) {
+        console.error('Error closing browser:', error);
+      }
+    }
     
     // Schedule next check with random interval
-    const nextInterval = getRandomInterval();
-    const nextTime = new Date(Date.now() + nextInterval);
-    console.log(`Next check scheduled for: ${nextTime.toLocaleString()} (in ${Math.round(nextInterval/60000)} minutes)`);
+    const nextCheck = getNextCheckTime();
+    console.log(`Next check scheduled for: ${nextCheck.toLocaleString()}`);
     
-    setTimeout(monitorTickets, nextInterval);
+    const delay = nextCheck.getTime() - Date.now();
+    setTimeout(monitorTickets, delay);
   }
 }
 
-// Function to send email notification using Resend
 async function sendNotification(tickets) {
   // Prepare email content
   let emailContent = `
